@@ -1,0 +1,38 @@
+pipeline {
+    agent any
+    environment {
+        def mavenHOME = tool name: "mymaven", type: "maven"
+        def mavenCMD = "${mavenHOME}/bin/mvn"
+    }
+    stages {
+        stage("Pulling Code from GitHub...") {
+            steps {
+                git "https://github.com/HarikrishnaSiram/one.git"
+            }
+        }
+        stage ("Building Code using MAVEN") {
+            steps {
+                sh "${mavenCMD} clean package"
+            }
+        }
+        stage ("Code Quality Analysis using SonarQube...") {
+            steps {
+                script {
+                    withSonarQubeEnv("mysonar"){
+                        sh "${mavenCMD} sonar:sonar"
+                    }
+                }
+            }
+        }
+        stage("Artifact Storing to S3 bucket..."){
+            steps{
+                s3Upload consoleLogLevel: 'INFO', dontSetBuildResultOnFailure: false, dontWaitForConcurrentBuildCompletion: false, entries: [[bucket: 'hari.project.bucket', excludedFile: '', flatten: false, gzipFiles: false, keepForever: false, managedArtifacts: true, noUploadOnFailure: true, selectedRegion: 'us-east-1', showDirectlyInBrowser: false, sourceFile: 'target/*.war', storageClass: 'STANDARD', uploadFromSlave: false, useServerSideEncryption: false]], pluginFailureResultConstraint: 'FAILURE', profileName: 'hari.project.bucket', userMetadata: []
+            }
+        }
+        stage("Deploying to Tomcat Server..."){
+            steps{
+                deploy adapters: [tomcat9(credentialsId: 'tomcat', path: '', url: 'http://35.168.22.31:8080/')], contextPath: '/MYAPP', war: 'target/*.war'
+            }
+        }
+    }
+}
